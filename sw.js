@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hk-book-v1';
+const CACHE_NAME = 'hk-book-v2';
 const urlsToCache = [
   './',
   './index.html',
