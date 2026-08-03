@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>北海道認購帳簿</title>
+  
+  <!-- PWA 設定 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4a69bd">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135706.png">
+
+  <!-- 載入 SheetJS 套件 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <style>
+    :root {
+      --primary: #4a69bd;
+      --bg: #f0f4f8;
+      --card-bg: #ffffff;
+      --profit: #20bf6b;
+      --accent: #eb4d4b;
+    }
+
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #2c3e50; }
+    .container { max-width: 950px; margin: 0 auto; }
+
+    .card { background: var(--card-bg); padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 15px; }
+    
+    .header-bar { display: flex; justify-content: space-between; align-items: center; }
+    .header-bar h2 { margin: 0; color: var(--primary); font-size: 1.3rem; }
+    .month-select { padding: 6px 12px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .stat-box { border-radius: 10px; padding: 12px; text-align: center; }
+    .stat-box.monthly { background: #e8f8f0; }
+    .stat-box.all-time { background: #eef2f7; }
+    .stat-box label { font-size: 0.85rem; color: #555; display: block; font-weight: bold; }
+    .stat-box span { font-weight: bold; font-size: 1.4rem; }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 0.8rem; color: #666; margin-bottom: 4px; font-weight: bold; }
+    .form-group input { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
+    .form-group input[readonly] { background: #f1f2f6; }
+
+    .btn { border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; }
+    .btn-add { background: var(--primary); width: 100%; margin-top: 12px; font-size: 1rem; }
+    .btn-export { background: var(--profit); }
+    .btn-danger { background: var(--accent); }
+    .btn-del { color: var(--accent); background: none; border: none; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
+
+    .img-preview-box { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .thumb-mini { width: 35px; height: 35px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; vertical-align: middle; margin-right: 8px; cursor: pointer; }
+    
+    .table-responsive { overflow-x: auto; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+    th { background: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; color: #495057; white-space: nowrap; }
+    td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; }
+    tr:hover { background: #f8f9fa; }
+
+    .empty-msg { text-align: center; color: #888; padding: 25px 0; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <div class="header-bar">
+      <h2>❄️ 北海道認購帳簿</h2>
+      <select id="monthFilter" class="month-select" onchange="renderApp()"></select>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-box monthly">
+        <label id="statMonthLabel">當月分潤總額</label>
+        <span id="monthlyTotalProfit" style="color: var(--profit);">$0</span>
+      </div>
+      <div class="stat-box all-time">
+        <label>全年歷史累積總分潤</label>
+        <span id="allTimeTotalProfit" style="color: var(--primary);">$0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px 0; font-size:1.1rem; color:var(--primary);">➕ 新增認購紀錄</h3>
+
+    <div class="img-preview-box">
+      <div class="form-group" style="flex:1;">
+        <label>📷 選擇圖片 / 拍照 / 或直接貼上截圖</label>
+        <input type="file" id="inputImg" accept="image/*" onchange="handleFileSelect(event)">
+      </div>
+      <div id="previewContainer" style="display:none; align-items:center;">
+        <img id="imgPreview" class="thumb-mini" alt="預覽">
+        <span style="font-size:0.8rem; color:#888; cursor:pointer;" onclick="clearImage()">❌ 移除圖片</span>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>日期</label>
+        <input type="date" id="inputDate">
+      </div>
+      <div class="form-group" style="grid-column: span 2;">
+        <label>商品名稱</label>
+        <input type="text" id="inputName" placeholder="例如：滿漢大餐">
+      </div>
+      <div class="form-group">
+        <label>認購成本</label>
+        <input type="number" id="inputCost" placeholder="0" oninput="calc()">
+      </div>
+      <div class="form-group">
+        <label>賣價</label>
+        <input type="number" id="inputPrice" placeholder="0" oninput="calc()">
+      </div>
+      <div class="form-group">
+        <label>單組利潤</label>
+        <input type="number" id="inputProfit" readonly placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>得標組數</label>
+        <input type="number" id="inputQty" value="1" min="1" oninput="calc()">
+      </div>
+      <div class="form-group">
+        <label style="color:var(--profit);">分潤總額</label>
+        <input type="number" id="inputTotalProfit" readonly style="font-weight:bold; color:var(--profit);" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>撥入帳戶</label>
+        <input type="text" id="inputAccount" placeholder="例如：台新/玉山">
+      </div>
+    </div>
+
+    <button class="btn btn-add" onclick="addRecord()">✅ 存入帳簿</button>
+  </div>
+
+  <div style="display:flex; gap:10px; margin-bottom:15px;">
+    <button class="btn btn-export" style="flex:1;" onclick="exportExcel()">📥 匯出 Excel (.xlsx)</button>
+    <button class="btn btn-danger" onclick="clearAll()">🗑️ 清空資料</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px 0; font-size:1.1rem;">📦 <span id="listTitle">當月認購明細</span></h3>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>商品名稱</th>
+            <th>認購成本</th>
+            <th>賣價</th>
+            <th>單組利潤</th>
+            <th>組數</th>
+            <th>分潤總額</th>
+            <th>撥入帳戶</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 註冊 Service Worker (PWA 關鍵)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW fail:', err));
+    });
+  }
+
+  let records = JSON.parse(localStorage.getItem('hk_simple_records')) || [];
+  let currentBase64 = "";
+
+  function init() {
+    document.getElementById('inputDate').valueAsDate = new Date();
+    initMonthSelect();
+    renderApp();
+    setupPasteHandler();
+  }
+
+  function setupPasteHandler() {
+    window.addEventListener('paste', e => {
+      const items = e.clipboardData.items;
+      for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          compressAndSetImage(blob);
+          break;
+        }
+      }
+    });
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) compressAndSetImage(file);
+  }
+
+  function compressAndSetImage(file) {
+    const reader = new FileReader();
+    reader.onload = event => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 120;
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > maxDim) { h *= maxDim / w; w = maxDim; } }
+        else { if (h > maxDim) { w *= maxDim / h; h = maxDim; } }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        currentBase64 = canvas.toDataURL('image/jpeg', 0.6);
+        
+        document.getElementById('imgPreview').src = currentBase64;
+        document.getElementById('previewContainer').style.display = 'flex';
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage() {
+    currentBase64 = "";
+    document.getElementById('inputImg').value = "";
+    document.getElementById('previewContainer').style.display = 'none';
+  }
+
+  function calc() {
+    const cost = Number(document.getElementById('inputCost').value) || 0;
+    const price = Number(document.getElementById('inputPrice').value) || 0;
+    const qty = Number(document.getElementById('inputQty').value) || 1;
+    const profit = price - cost;
+    document.getElementById('inputProfit').value = profit;
+    document.getElementById('inputTotalProfit').value = profit * qty;
+  }
+
+  function addRecord() {
+    const name = document.getElementById('inputName').value.trim();
+    const dateVal = document.getElementById('inputDate').value;
+    if (!name) return alert('請輸入商品名稱！');
+    if (!dateVal) return alert('請選擇日期！');
+
+    const record = {
+      id: Date.now(),
+      date: dateVal,
+      name: name,
+      cost: Number(document.getElementById('inputCost').value) || 0,
+      price: Number(document.getElementById('inputPrice').value) || 0,
+      profit: Number(document.getElementById('inputProfit').value) || 0,
+      qty: Number(document.getElementById('inputQty').value) || 1,
+      totalProfit: Number(document.getElementById('inputTotalProfit').value) || 0,
+      account: document.getElementById('inputAccount').value.trim() || '-',
+      img: currentBase64
+    };
+
+    records.push(record);
+    localStorage.setItem('hk_simple_records', JSON.stringify(records));
+
+    const addedMonth = dateVal.substring(0, 7);
+
+    document.getElementById('inputName').value = '';
+    document.getElementById('inputCost').value = '';
+    document.getElementById('inputPrice').value = '';
+    document.getElementById('inputProfit').value = '';
+    document.getElementById('inputQty').value = '1';
+    document.getElementById('inputTotalProfit').value = '';
+    document.getElementById('inputAccount').value = '';
+    clearImage();
+
+    initMonthSelect(addedMonth);
+    renderApp();
+  }
+
+  function initMonthSelect(targetMonth = null) {
+    const select = document.getElementById('monthFilter');
+    const currentVal = targetMonth || select.value;
+    select.innerHTML = '';
+
+    const months = new Set(records.map(r => r.date.substring(0, 7)));
+    const thisMonth = new Date().toISOString().substring(0, 7);
+    months.add(thisMonth);
+
+    Array.from(months).sort().reverse().forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.innerText = `${m.replace('-', '年 ')} 月`;
+      select.appendChild(opt);
+    });
+
+    if (currentVal && Array.from(months).includes(currentVal)) {
+      select.value = currentVal;
+    }
+  }
+
+  function renderApp() {
+    const selectedMonth = document.getElementById('monthFilter').value;
+    document.getElementById('statMonthLabel').innerText = `${selectedMonth.replace('-', '年 ')} 月 - 分潤總額`;
+    document.getElementById('listTitle').innerText = `${selectedMonth.replace('-', '年 ')} 月 明細`;
+
+    const filtered = records.filter(r => r.date.startsWith(selectedMonth));
+    let monthlySum = 0;
+    let allTimeSum = records.reduce((acc, r) => acc + r.totalProfit, 0);
+
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">該月份尚無資料</td></tr>`;
+    } else {
+      filtered.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(r => {
+        monthlySum += r.totalProfit;
+        const imgTag = r.img ? `<img src="${r.img}" class="thumb-mini" onclick="window.open('${r.img}')" title="點擊檢視圖片">` : '';
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.date}</td>
+            <td>${imgTag}<b>${r.name}</b></td>
+            <td>$${r.cost.toLocaleString()}</td>
+            <td>$${r.price.toLocaleString()}</td>
+            <td>$${r.profit.toLocaleString()}</td>
+            <td>${r.qty}</td>
+            <td style="color:var(--profit); font-weight:bold;">$${r.totalProfit.toLocaleString()}</td>
+            <td>${r.account || '-'}</td>
+            <td><button class="btn-del" onclick="deleteRecord(${r.id})">刪除</button></td>
+          </tr>
+        `;
+      });
+    }
+
+    document.getElementById('monthlyTotalProfit').innerText = '$' + monthlySum.toLocaleString();
+    document.getElementById('allTimeTotalProfit').innerText = '$' + allTimeSum.toLocaleString();
+  }
+
+  function deleteRecord(id) {
+    if (confirm('確定刪除此筆資料？')) {
+      records = records.filter(r => r.id !== id);
+      localStorage.setItem('hk_simple_records', JSON.stringify(records));
+      initMonthSelect();
+      renderApp();
+    }
+  }
+
+  function clearAll() {
+    if (confirm('確定要清空所有紀錄嗎？')) {
+      records = [];
+      localStorage.setItem('hk_simple_records', JSON.stringify(records));
+      initMonthSelect();
+      renderApp();
+    }
+  }
+
+  function exportExcel() {
+    if (records.length === 0) return alert('沒有資料可匯出！');
+
+    const grouped = {};
+    records.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(r => {
+      const monthKey = r.date.substring(0, 7);
+      if (!grouped[monthKey]) grouped[monthKey] = [];
+      grouped[monthKey].push(r);
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    Object.keys(grouped).forEach(monthKey => {
+      const monthData = grouped[monthKey];
+      const sheetData = [
+        ["日期", "商品名稱", "認購成本", "賣價", "單組利潤", "得標組數", "分潤總額", "撥入帳戶"]
+      ];
+
+      monthData.forEach(r => {
+        sheetData.push([
+          r.date,
+          r.name,
+          r.cost,
+          r.price,
+          r.profit,
+          r.qty,
+          r.totalProfit,
+          r.account || '-'
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      const sheetName = `${monthKey.replace('-', '年')}月`;
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    const fileName = `認購帳簿紀錄_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  }
+
+  init();
+</script>
+</body>
+</html>
